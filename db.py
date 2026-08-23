@@ -97,11 +97,23 @@ def fetch_briefings_for_date(connection_string: str, target_run_id: str) -> list
     url, headers = _get_headers()
     endpoint = f"{url}/rest/v1/briefings"
     
-    # PostgREST syntax for OR condition
-    params = {
-        "or": f"(run_id.eq.{target_run_id},date.eq.{target_run_id})",
-        "order": "id.asc"
-    }
+    # If the target contains a space (e.g. "2026-08-23 10:30 PM"), it's a run_id.
+    # If it doesn't (e.g. "2026-08-23"), it's a legacy date fallback.
+    if " " in target_run_id:
+        # Match only exact run_id
+        # We need to surround the string in double quotes for PostgREST if it has spaces
+        # actually requests handles URL encoding, but PostgREST exact match on strings with spaces requires quotes inside the eq.
+        params = {
+            "run_id": f"eq.{target_run_id}",
+            "order": "id.asc"
+        }
+    else:
+        # Match legacy rows that have this date AND no run_id
+        params = {
+            "date": f"eq.{target_run_id}",
+            "run_id": "is.null",
+            "order": "id.asc"
+        }
     
     resp = requests.get(endpoint, headers=headers, params=params)
     resp.raise_for_status()
