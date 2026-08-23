@@ -194,7 +194,6 @@ def _run_pipeline(terminal_box=None, anim_box=None) -> list[dict]:
 
     today          = datetime.date.today()
     current_run_id = datetime.datetime.now().strftime("%Y-%m-%d %I:%M %p")
-    conn_str       = st.secrets["SUPABASE_CONN_STR"]
 
     log_lines = []
     if terminal_box is None:
@@ -323,7 +322,7 @@ def _run_pipeline(terminal_box=None, anim_box=None) -> list[dict]:
 
         # saving all this into our db
         try:
-            save_briefing_row(conn_str, today, story, analyst_json, coach_json, run_id=current_run_id)
+            save_briefing_row("", today, story, analyst_json, coach_json, run_id=current_run_id)
             _log(f"DB::WRITE — story {idx} saved")
         except Exception as db_exc:
             st.warning(f"Database save failed for story {idx}: {db_exc}")
@@ -572,12 +571,11 @@ def _render_dashboard(rows: list[dict]):
 #view old briefings
 def _render_past_briefings():
     from db import fetch_briefing_dates, fetch_briefings_for_date
-    conn_str = st.secrets["SUPABASE_CONN_STR"]
 
     st.markdown("<span class='tag-black'>Past Briefings</span>", unsafe_allow_html=True)
 
     try:
-        dates = fetch_briefing_dates(conn_str)
+        dates = fetch_briefing_dates("")
     except Exception as e:
         return st.error(f"Could not load past dates. Error: {str(e)}")
 
@@ -587,7 +585,7 @@ def _render_past_briefings():
     if not sel: return
 
     try:
-        rows = fetch_briefings_for_date(conn_str, sel)
+        rows = fetch_briefings_for_date("", sel)
     except Exception as e:
         return st.error(f"Error loading: {e}")
 
