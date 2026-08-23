@@ -1,0 +1,38 @@
+# .gitignore for Healthcare GDPI Co-Pilot
+# Never commit secrets or local environment artifacts.
+
+# Streamlit secrets — contains API keys and passwords
+.streamlit/secrets.toml
+
+# Python virtual environment
+venv/
+.venv/
+env/
+.env
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+
+# IDE and OS artifacts
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Pytest / test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+
+scratch/
