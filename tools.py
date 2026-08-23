@@ -5,7 +5,6 @@
 import feedparser
 import trafilatura
 import requests
-from crewai.tools import tool
 from typing import Optional
 
 
