@@ -32,7 +32,15 @@ from datetime import date
 
 def _get_connection(connection_string: str):
     """Open a new psycopg2 connection. Caller is responsible for closing."""
-    conn = psycopg2.connect(connection_string, sslmode="require")
+
+    if connection_string.startswith("postgresql://") or connection_string.startswith("postgres://"):
+        if "sslmode" not in connection_string:
+            sep = "&" if "?" in connection_string else "?"
+            connection_string = f"{connection_string}{sep}sslmode=require"
+        conn = psycopg2.connect(connection_string)
+    else:
+        # Keyword/DSN format — sslmode can be passed as a kwarg
+        conn = psycopg2.connect(connection_string, sslmode="require")
     return conn
 
 

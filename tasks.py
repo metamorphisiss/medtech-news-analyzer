@@ -1,10 +1,6 @@
 # tasks.py
 # Task prompt definitions for Scout, Analyst, and Coach agents.
-# Implements the full schemas from Section 5 of the build spec, extended with
-# the dashboard data fields (key_facts, key_numbers, companies_mentioned,
-# policies_mentioned, key_concepts, one_opinion, policy_radar_entry,
-# company_to_watch, concept_explained).
-
+# Implements the full schemas from Section 5 of the build spec, extended with the dashboard data fields
 import json
 from crewai import Task
 
@@ -20,7 +16,6 @@ def make_scout_task(agent, feed_entries: list[dict], region: str) -> Task:
     The Scout's job is pure reasoning: relevance filtering, deduplication,
     ranking, and selection of the top 4 stories for the region.
     """
-    # Format entries as a numbered text block for the prompt.
     # Cap at 120 entries to stay within token budget.
     entries_to_show = feed_entries[:120]
     lines = []

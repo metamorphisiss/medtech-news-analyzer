@@ -1,7 +1,7 @@
 # Healthcare Intelligence Co-Pilot (GDPI)
 
 ## Overview
-An automated pipeline that generates executive-level healthcare intelligence briefings and MBA interview prep. Built with a responsive brutalist UI, it processes live RSS feeds and synthesizes complex medical and operational data into an intuitive dashboard.
+An automated pipeline that generates executive-level healthcare intelligence briefings. It processes live RSS feeds and synthesizes complex medical and operational data into an intuitive dashboard.
 
 ## Features
 * Pure Python Scout Agent: Zero-API keyword-scoring engine to filter and rank regional news efficiently.
