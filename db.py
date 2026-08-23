@@ -25,23 +25,24 @@
 #   );
 
 import json
-import psycopg2
-import psycopg2.extras
+import requests
+import streamlit as st
 from datetime import date
 
-
-def _get_connection(connection_string: str):
-    """Open a new psycopg2 connection. Caller is responsible for closing."""
-
-    if connection_string.startswith("postgresql://") or connection_string.startswith("postgres://"):
-        if "sslmode" not in connection_string:
-            sep = "&" if "?" in connection_string else "?"
-            connection_string = f"{connection_string}{sep}sslmode=require"
-        conn = psycopg2.connect(connection_string)
-    else:
-        # Keyword/DSN format — sslmode can be passed as a kwarg
-        conn = psycopg2.connect(connection_string, sslmode="require")
-    return conn
+def _get_headers():
+    # Read directly from secrets, ignoring whatever app.py passes
+    url = st.secrets.get("SUPABASE_URL", "").strip("/")
+    key = st.secrets.get("SUPABASE_SECRET_KEY", st.secrets.get("SUPABASE_KEY", ""))
+    
+    if not url or not key:
+        raise ValueError("Missing SUPABASE_URL or SUPABASE_SECRET_KEY in secrets.")
+        
+    return url, {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+    }
 
 
 def save_briefing_row(
@@ -52,70 +53,56 @@ def save_briefing_row(
     coach_json: dict,
     **kwargs
 ) -> int:
-    """
-    Insert one briefing row (one story) into the briefings table.
-    Returns the new row's id.
-
-    Arguments:
-        connection_string : Supabase Postgres connection string from secrets
-        run_date          : The date this pipeline run covers (usually today)
-        story             : Scout output dict with keys: title, link, source, published_date
-        analyst_json      : Analyst output dict (MBA-lens fields)
-        coach_json        : Coach output dict (GDPI prep + dashboard components)
-    """
-    sql = """
-        INSERT INTO briefings
-            (date, title, source, link, analyst_json, coach_json, run_id)
-        VALUES
-            (%s, %s, %s, %s, %s, %s, %s)
-        RETURNING id;
-    """
-    with _get_connection(connection_string) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                sql,
-                (
-                    run_date,
-                    story.get("title", ""),
-                    story.get("source", ""),
-                    story.get("link", ""),
-                    json.dumps(analyst_json),
-                    json.dumps(coach_json),
-                    kwargs.get("run_id") or run_date.isoformat(),
-                ),
-            )
-            new_id = cur.fetchone()[0]
-        conn.commit()
-    return new_id
+    """Insert one briefing row into the briefings table using REST API."""
+    url, headers = _get_headers()
+    endpoint = f"{url}/rest/v1/briefings"
+    
+    payload = {
+        "date": run_date.isoformat(),
+        "title": story.get("title", ""),
+        "source": story.get("source", ""),
+        "link": story.get("link", ""),
+        "analyst_json": analyst_json,
+        "coach_json": coach_json,
+        "run_id": kwargs.get("run_id") or run_date.isoformat()
+    }
+    
+    resp = requests.post(endpoint, headers=headers, json=payload)
+    resp.raise_for_status()
+    data = resp.json()
+    return data[0]["id"] if data else 0
 
 
 def fetch_briefing_dates(connection_string: str) -> list[str]:
-    """
-    Return a sorted (descending) list of distinct run_ids that have briefings stored.
-    Used to populate the Past Briefings selector in the UI.
-    Fallback to date if run_id is NULL for older entries.
-    """
-    sql = "SELECT DISTINCT COALESCE(run_id, date::text) as run_label FROM briefings ORDER BY run_label DESC;"
-    with _get_connection(connection_string) as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql)
-            rows = cur.fetchall()
-    return [row[0] for row in rows]
+    """Return a sorted (descending) list of distinct run_ids using REST API."""
+    url, headers = _get_headers()
+    endpoint = f"{url}/rest/v1/briefings"
+    params = {"select": "run_id,date"}
+    
+    resp = requests.get(endpoint, headers=headers, params=params)
+    resp.raise_for_status()
+    rows = resp.json()
+    
+    labels = set()
+    for r in rows:
+        label = r.get("run_id") or r.get("date")
+        if label:
+            labels.add(str(label))
+            
+    return sorted(list(labels), reverse=True)
 
 
 def fetch_briefings_for_date(connection_string: str, target_run_id: str) -> list[dict]:
-    """
-    Return all briefing rows for a given run_id (or date string as fallback), ordered by id (insertion order).
-    Each row is returned as a dict matching the table columns.
-    """
-    sql = """
-        SELECT id, date, title, source, link, analyst_json, coach_json, created_at, run_id
-        FROM briefings
-        WHERE COALESCE(run_id, date::text) = %s
-        ORDER BY id ASC;
-    """
-    with _get_connection(connection_string) as conn:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(sql, (target_run_id,))
-            rows = cur.fetchall()
-    return [dict(row) for row in rows]
+    """Return all briefing rows for a given run_id using REST API."""
+    url, headers = _get_headers()
+    endpoint = f"{url}/rest/v1/briefings"
+    
+    # PostgREST syntax for OR condition
+    params = {
+        "or": f"(run_id.eq.{target_run_id},date.eq.{target_run_id})",
+        "order": "id.asc"
+    }
+    
+    resp = requests.get(endpoint, headers=headers, params=params)
+    resp.raise_for_status()
+    return resp.json()
