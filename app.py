@@ -578,8 +578,8 @@ def _render_past_briefings():
 
     try:
         dates = fetch_briefing_dates(conn_str)
-    except Exception:
-        return st.warning("Could not load past dates.")
+    except Exception as e:
+        return st.error(f"Could not load past dates. Error: {str(e)}")
 
     if not dates: return st.info("No past briefings.")
 
