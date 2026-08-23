@@ -1,11 +1,7 @@
 # app.py
 # Streamlit entry point — UI, password gate, pipeline orchestration.
-# This is the single file that runs on Streamlit Community Cloud.
-#
-# Secrets expected in .streamlit/secrets.toml (local) or Community Cloud dashboard:
-#   GEMINI_API_KEY      = "..."
-#   SUPABASE_CONN_STR   = "postgresql://postgres:[password]@[host]:5432/postgres"
-#   APP_PASSWORD        = "..."
+# Secrets expected in .streamlit/secrets.toml
+
 
 import os
 import json
@@ -23,9 +19,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# Design tokens — exact values from build spec Section 6.
-# No gradients. Flat fills only. Sans-serif typography.
-# Using Inter from Google Fonts (clean grotesque, non-generic when paired well).
 STYLE = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap');
@@ -129,7 +122,7 @@ div[data-baseweb="select"] * { color: #0A0A0A !important; font-size: 1.1rem !imp
 st.markdown(STYLE, unsafe_allow_html=True)
 
 
-# Helper: inject API keys into os.environ from st.secrets
+# inject API keys into os.environ from st.secrets
 def _inject_secrets():
     os.environ["GROQ_API_KEY"]         = st.secrets.get("GROQ_API_KEY", "")
     os.environ["OPENROUTER_API_KEY"]   = st.secrets.get("OPENROUTER_API_KEY", "")
@@ -165,7 +158,7 @@ def _password_gate() -> bool:
 
     return False
 
-# Feed Fetching (Pure Python)
+# Feed Fetching - pure python
 def _pull_feed_entries(urls: list[str]) -> list[dict]:
     """Pulls recent entries from feeds, tagged by region (India vs Global)."""
     from sources import INDIA_FEEDS
@@ -175,10 +168,9 @@ def _pull_feed_entries(urls: list[str]) -> list[dict]:
         try:
             feed = feedparser.parse(url)
             source_title = feed.feed.get("title", "News Source")
-            # Tag by explicit source list — not URL guessing
             is_india = url in india_feed_set
             prefix = "[INDIA] " if is_india else ""
-            # Equal pool size for both regions — guarantees 50/50 scout selection
+            # Equal pool size for both regions - so we get both indian and global news
             for entry in feed.entries[:10]:
                 entries.append({
                     "title":     entry.get("title", ""),
@@ -204,7 +196,6 @@ def _run_pipeline(terminal_box=None, anim_box=None) -> list[dict]:
     current_run_id = datetime.datetime.now().strftime("%Y-%m-%d %I:%M %p")
     conn_str       = st.secrets["SUPABASE_CONN_STR"]
 
-    # --- Terminal Visualizer ---
     log_lines = []
     if terminal_box is None:
         terminal_box = st.empty()
@@ -246,7 +237,7 @@ def _run_pipeline(terminal_box=None, anim_box=None) -> list[dict]:
         </div>"""
         anim_box.markdown(html, unsafe_allow_html=True)
 
-    # Step 1: Pull entries from all feeds in one pass (no double-parse)
+    # Step 1 - pull entries from all feeds in one pass
     _update_anim("SCOUT", "Pulling entries from RSS feeds...")
     _log("INIT — fetching RSS feeds")
     from sources import INDIA_FEEDS, GLOBAL_FEEDS, CANDIDATE_FEEDS
@@ -301,7 +292,7 @@ def _run_pipeline(terminal_box=None, anim_box=None) -> list[dict]:
     if not global_entries:
         _log("WARNING — No Global feed entries found, will show India-only briefing")
 
-    # Step 2: Regional scouts
+    # Step 2 - Regional scouts
     _update_anim("SCOUT", "Running India relevance filter...")
     india_stories = run_scout(india_entries, "India", log_fn=_log)
     if not india_stories:
@@ -319,7 +310,7 @@ def _run_pipeline(terminal_box=None, anim_box=None) -> list[dict]:
     _log(f"SCOUT COMPLETE — {len(stories)} stories ({len(india_stories)} India + {len(global_stories)} Global)")
 
 
-    # Step 4: Analyst + Coach per story (single combined call)
+    # Step 4 - Analyst + Coach per stor, this is a one single combined call
     results = []
     for idx, story in enumerate(stories, start=1):
         title_short = story.get("title", "")[:50] + ("..." if len(story.get("title","")) > 50 else "")
@@ -330,7 +321,7 @@ def _run_pipeline(terminal_box=None, anim_box=None) -> list[dict]:
         _log(f"ANALYSIS — story {idx}: running analyst + coach (single call)")
         analyst_json, coach_json = run_analyst_and_coach(story, full_text, log_fn=_log)
 
-        # Save to DB
+        # saving all this into our db
         try:
             save_briefing_row(conn_str, today, story, analyst_json, coach_json, run_id=current_run_id)
             _log(f"DB::WRITE — story {idx} saved")
@@ -344,10 +335,8 @@ def _run_pipeline(terminal_box=None, anim_box=None) -> list[dict]:
     return results
 
 
-# ---------------------------------------------------------------------------
-# Dashboard Rendering (Full Layout)
-# ---------------------------------------------------------------------------
 
+#dashboard
 def _safe_parse_json(data):
     import json
     if isinstance(data, dict):
@@ -370,7 +359,6 @@ def _render_dashboard(rows: list[dict]):
 
     today_str = datetime.date.today().strftime("%A, %d %B %Y")
 
-    # --- Aggregate data (logic unchanged) ---
     all_facts, all_numbers, all_companies, all_policies, all_concepts, all_opinions = [], [], [], [], [], []
     for row in rows:
         an = _safe_parse_json(row.get("analyst", {}))
@@ -388,11 +376,10 @@ def _render_dashboard(rows: list[dict]):
     companies_w   = [_safe_parse_json(r.get("coach", {})).get("company_to_watch")   for r in rows if _safe_parse_json(r.get("coach", {})).get("company_to_watch")]
     concepts_e    = [_safe_parse_json(r.get("coach", {})).get("concept_explained")  for r in rows if _safe_parse_json(r.get("coach", {})).get("concept_explained")]
 
-    # --- DATE HEADER ---
+    #date
     st.markdown(f"<p class='meta'>{today_str.upper()}</p>", unsafe_allow_html=True)
     st.markdown("<hr class='bd'>", unsafe_allow_html=True)
 
-    # --- METRIC WIDGETS ROW ---
     m_cols = st.columns(5)
     metrics = [
         (len(rows),              "Stories"),
@@ -411,7 +398,7 @@ def _render_dashboard(rows: list[dict]):
 
     st.markdown("<hr class='bd'>", unsafe_allow_html=True)
 
-    # --- QUICK-JUMP INDEX ---
+    #hyperlinks-can access story from top itself instead of scrolling
     idx_html = "<div class='story-index'>\n<div class='story-index-title'>TOP HEADLINES</div>\n"
     for idx, r in enumerate(rows, start=1):
         st_title = r["story"].get("title", "")
@@ -419,7 +406,7 @@ def _render_dashboard(rows: list[dict]):
     idx_html += "</div>"
     st.markdown(idx_html, unsafe_allow_html=True)
 
-    # --- EXECUTIVE HIGHLIGHTS ---
+    #highlights
     if True:
         rd_col, right_col = st.columns([6, 4])
         with rd_col:
@@ -450,18 +437,13 @@ def _render_dashboard(rows: list[dict]):
                     st.markdown(f"<div style='font-size: 1.1rem; color: #CC0000; font-weight: 700; margin-bottom: 0.5rem;'>CONCEPTS TO KNOW</div><div style='font-size: 1.5rem; font-weight: 900; color: #000; margin-bottom: 0.8rem;'>{concept}</div><div style='font-size: 1.35rem; color: #111; line-height: 1.65; text-align: justify;'>{english}</div>", unsafe_allow_html=True)
         st.markdown("<hr class='bd'>", unsafe_allow_html=True)
 
-    # --- DEEP DIVE STORY CARDS ---
+    #deep dive into each of the stories
     for i, row in enumerate(rows, start=1):
         story   = row["story"]
         analyst = _safe_parse_json(row.get("analyst"))
         coach   = _safe_parse_json(row.get("coach"))
-
-        # Anchor target for quick-jump
         st.markdown(f"<div id='story-{i}'></div>", unsafe_allow_html=True)
-
-        # Clean title for expander
         story_source = story.get('source', '')
-        # If the source string still has [INDIA], strip it for cleaner display
         is_legacy_india = story_source.startswith("[INDIA]")
         if is_legacy_india:
             story_source = story_source.replace("[INDIA]", "").strip()
@@ -490,7 +472,6 @@ def _render_dashboard(rows: list[dict]):
                 f"<a href='{story.get('link','#')}' target='_blank' style='text-decoration:none;font-family:Space Mono,monospace;font-weight:700;color:#CC0000;font-size:1.1em;text-transform:uppercase;'>Read Source Article ↗</a>",
                 unsafe_allow_html=True
             )
-            # Tabbed content
             tab_mba, tab_gdpi, tab_data = st.tabs(["MBA Lens", "GD / PI Exam", "Raw Data"])
 
             with tab_mba:
@@ -588,9 +569,7 @@ def _render_dashboard(rows: list[dict]):
         st.markdown("<hr class='bd'>", unsafe_allow_html=True)
 
 
-# ---------------------------------------------------------------------------
-# Past Briefings
-# ---------------------------------------------------------------------------
+#view old briefings
 def _render_past_briefings():
     from db import fetch_briefing_dates, fetch_briefings_for_date
     conn_str = st.secrets["SUPABASE_CONN_STR"]
@@ -630,10 +609,7 @@ def _render_past_briefings():
 
     _render_dashboard(normalized)
 
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
+#main
 def main():
     if not _password_gate(): return
     _inject_secrets()
@@ -649,16 +625,14 @@ def main():
         unsafe_allow_html=True,
     )
 
-    # --- Button row ---
+    
     col1, col2 = st.columns([4, 1])
     with col2:
         run_clicked = st.button("Run Pipeline", use_container_width=True, key="run_btn")
 
-    # --- Containers declared immediately after button, before any rendering ---
     animation_container = col1.empty()
     pipeline_container = st.empty()
 
-    # --- Show hint text when idle ---
     if not run_clicked:
         animation_container.markdown(
             "<p style='font-family:Space Mono,monospace;font-size:1.15rem;color:#555;font-weight:bold;'>"
@@ -666,15 +640,12 @@ def main():
             unsafe_allow_html=True,
         )
 
-    # --- Show existing results if available ---
     if "pipeline_results" in st.session_state and not run_clicked:
         _render_dashboard(st.session_state["pipeline_results"])
 
-    # --- Past briefings expander ---
     with st.expander("View a past briefing"):
         _render_past_briefings()
 
-    # --- Execute pipeline on click ---
     if run_clicked:
         animation_container.empty()
         res = _run_pipeline(terminal_box=pipeline_container, anim_box=animation_container)

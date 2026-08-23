@@ -2,8 +2,6 @@ import os
 from crewai import Agent, LLM
 import litellm
 
-# --- PATCH FOR CREWAI + PROVIDER BUG ---
-# CrewAI injects an Anthropic-specific `cache_breakpoint` flag that some providers reject.
 # This patch intercepts the LiteLLM call and strips it out before the API request.
 original_completion = litellm.completion
 
@@ -15,7 +13,7 @@ def clean_messages(*args, **kwargs):
     return original_completion(*args, **kwargs)
 
 litellm.completion = clean_messages
-# -----------------------------------
+
 def _build_llm(model: str, temperature: float = 0.4) -> LLM:
     """
     Constructs an OpenRouter-hosted LLM instance.
@@ -33,10 +31,6 @@ def _build_llm(model: str, temperature: float = 0.4) -> LLM:
         base_url="https://openrouter.ai/api/v1",
     )
  
- 
-# Models verified FREE via live OpenRouter API on 2026-08-23.
-# Gemma 4 31B: large context window, great for Scout filtering tasks.
-# Nemotron Super 120B: strong reasoning quality for Analyst/Coach tasks.
 FAST_MODEL = "openrouter/google/gemma-4-31b-it:free"
 QUALITY_MODEL = "openrouter/nvidia/nemotron-3-super-120b-a12b:free"
  
